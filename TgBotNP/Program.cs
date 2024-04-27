@@ -7,9 +7,8 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.ReplyMarkups;
 using System.Net;
 using System.Text.Json;
-using System;
-using System.Collections.Specialized;
-using System.Text;
+using System.Text.RegularExpressions;
+using System.Diagnostics.Eventing.Reader;
 
 public class OrderRequest
 {
@@ -59,6 +58,7 @@ class Program
 
         await Task.Delay(-1); // Устанавливаем бесконечную задержку, чтобы наш бот работал постоянно
     }
+
     private static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
 
@@ -95,10 +95,16 @@ class Program
                         if (message.Text == "/start")
                         {
                             List<KeyboardButton[]> kbList = MakeButtonsFromList(printernames);
+                            Console.WriteLine(kbList.Count);
 
-                            var replyKeyboard = new ReplyKeyboardMarkup(kbList) { ResizeKeyboard = true, };
+                            List<InlineKeyboardButton[]> kbList1 = MakeInlineButtonsFromList(printernames);
 
-                            await botClient.SendTextMessageAsync(chat.Id, "Выберите принтер", replyMarkup: replyKeyboard);
+                            /*var replyKeyboard = new ReplyKeyboardMarkup(kbList) { ResizeKeyboard = true, };
+                            await botClient.SendTextMessageAsync(chat.Id, "Выберите принтер", replyMarkup: replyKeyboard);*/
+
+                            var inlineKeyboard = new InlineKeyboardMarkup(kbList1);
+                            await botClient.SendTextMessageAsync(chat.Id, $"Выберите принтер", replyMarkup: inlineKeyboard);
+
                             return; 
                         };
 
@@ -140,7 +146,7 @@ class Program
                         }
                         if(Await == "tel")
                         {
-                            if (EmailCheck(message.Text))
+                            if (TGCheck(message.Text))
                             {
                                 request.tel = message.Text;
                                 await botClient.SendTextMessageAsync(chat.Id, "Напишите комментарий к заказу");
@@ -301,6 +307,18 @@ class Program
                                     Await = "CHdescription";
                                     return;
                                 }
+                            default:
+                                {
+                                    if (printernames.Contains(callbackQuery.Data))
+                                    {
+                                        request = new OrderRequest();
+                                        request.name = $"{user.FirstName} {user.LastName}";
+                                        request.printername = callbackQuery.Data;
+                                        await botClient.SendTextMessageAsync(chat.Id, "Напишите свой EMail");
+                                        Await = "email";
+                                    }
+                                    return;
+                                }
                         }
                     return;
                 }
@@ -369,16 +387,62 @@ class Program
         }
         return kbList;
     }
+    public static List<InlineKeyboardButton[]> MakeInlineButtonsFromList(List<string> names)
+    {
+        List<InlineKeyboardButton[]> kbList = new List<InlineKeyboardButton[]>();
+        int pCnt = names.Count;
+        while (pCnt != 0)
+        {
+            if (pCnt >= 3)
+            {
+                kbList.Add(new InlineKeyboardButton[]
+                {
+                    InlineKeyboardButton.WithCallbackData(names[names.Count - pCnt], names[names.Count - pCnt]),
+                    InlineKeyboardButton.WithCallbackData(names[names.Count - pCnt + 1], names[names.Count - pCnt + 1]),
+                    InlineKeyboardButton.WithCallbackData(names[names.Count - pCnt] + 2, names[names.Count - pCnt] + 2),
+                });
+                pCnt -= 3;
+            }
+            else
+            {
+                InlineKeyboardButton[] kbLast = new InlineKeyboardButton[pCnt];
+                for (int i = pCnt; i > 0; i--)
+                {
+                    kbLast[pCnt - i] = InlineKeyboardButton.WithCallbackData(names[names.Count - i], names[names.Count - i]);
+                }
+                kbList.Add(kbLast);
+                pCnt = 0;
+            }
+        }
+        return kbList;
+    }
 
     // TODO
     public static bool EmailCheck(string text)
     {
-        return true;
+        Regex regex = new Regex(@"(\w*)@(\w*).(\w*)");
+
+        return regex.IsMatch(text);
     }
 
     public static bool TGCheck(string text)
     {
-        return true;
+        int outing;
+
+        bool plusFirst = text.StartsWith("+");
+        bool CountAcess = false;
+        Console.WriteLine(text.Count());
+        if (plusFirst)
+        {
+            CountAcess = text.Count() <= 12;
+        }
+        else
+        {
+            CountAcess = text.Count() <= 11;
+        }
+
+        return CountAcess & (plusFirst || int.TryParse(text[0].ToString(), out outing));
     }
+
 
 }
